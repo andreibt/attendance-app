@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 
+import { Redirect, useRouter } from 'expo-router';
+
 import {
   AttendanceStatus,
   ClassRecord,
@@ -18,6 +20,7 @@ import {
 } from '@/context/AttendanceContext';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/context/AuthContext';
 
 const AttendanceStatusLabels: Record<AttendanceStatus, string> = {
   pending: 'Pending',
@@ -201,14 +204,23 @@ const ClassItem = ({
 };
 
 export default function TeacherScreen() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const { classes, addClass, confirmEnrollment, createSession, setAttendanceStatus, buildReport } =
     useAttendance();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [teacherName, setTeacherName] = useState('');
+  const [teacherName, setTeacherName] = useState(user?.role === 'teacher' ? user.name : '');
   const [sessionInputs, setSessionInputs] = useState<SessionInputState>({});
-
   const reports = useMemo(() => classes.map((cls) => buildReport(cls.id)), [classes, buildReport]);
+
+  if (!user) {
+    return <Redirect href="/" />;
+  }
+
+  if (user.role !== 'teacher') {
+    return <Redirect href="/(tabs)/explore" />;
+  }
 
   const handleAddClass = () => {
     if (!title.trim() || !teacherName.trim()) {
@@ -219,7 +231,7 @@ export default function TeacherScreen() {
     addClass({ title: title.trim(), description: description.trim(), teacher: teacherName.trim() });
     setTitle('');
     setDescription('');
-    setTeacherName('');
+    setTeacherName(user.name);
     Alert.alert('Class created', 'Your class has been added to the roster.');
   };
 
@@ -254,9 +266,26 @@ export default function TeacherScreen() {
     setAttendanceStatus(classId, sessionId, studentId, status);
   };
 
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ThemedView style={styles.sectionCard} lightColor="#ffffff" darkColor="#1f2933">
+        <View style={styles.identityRow}>
+          <View>
+            <ThemedText type="defaultSemiBold">Signed in as</ThemedText>
+            <ThemedText>{user.name}</ThemedText>
+          </View>
+          <Pressable
+            onPress={handleLogout}
+            style={({ pressed }) => [styles.logoutButton, pressed && styles.buttonPressed]}
+          >
+            <ThemedText style={styles.logoutButtonText}>Log out</ThemedText>
+          </Pressable>
+        </View>
         <ThemedText type="title" style={styles.heading}>
           Teacher workspace
         </ThemedText>
@@ -382,6 +411,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: '#fff',
+  },
+  identityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logoutButton: {
+    borderWidth: 1,
+    borderColor: '#d0d0d0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  logoutButtonText: {
+    color: '#0a7ea4',
+    fontWeight: '600',
   },
   multilineInput: {
     minHeight: 60,
