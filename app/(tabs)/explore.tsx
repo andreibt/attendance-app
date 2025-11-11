@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Alert,
   FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
+
+import { Redirect, useRouter } from 'expo-router';
 
 import {
   AttendanceStatus,
@@ -18,6 +19,7 @@ import {
 } from '@/context/AttendanceContext';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/context/AuthContext';
 
 const AttendanceStatusLabels: Record<AttendanceStatus, string> = {
   pending: 'Pending',
@@ -107,7 +109,7 @@ const StudentClassCard = ({
                 ? 'You are enrolled in this class.'
                 : 'Your enrollment request is awaiting teacher approval.'
               : 'Not enrolled yet.'
-            : 'Enter your name to enroll and track attendance.'}
+            : 'Sign in to enroll and track attendance.'}
         </ThemedText>
         <Pressable
           style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, !studentId && styles.disabledButton]}
@@ -176,16 +178,26 @@ const StudentClassCard = ({
 
 export default function StudentScreen() {
   const { classes, requestEnrollment, markAttendanceForStudent } = useAttendance();
-  const [studentName, setStudentName] = useState('');
+  const { user, logout } = useAuth();
+  const router = useRouter();
 
+  const studentName = user?.name ?? '';
   const studentId = useMemo(() => {
     if (!studentName.trim()) return null;
     return makeStudentId(studentName);
   }, [studentName]);
 
+  if (!user) {
+    return <Redirect href="/" />;
+  }
+
+  if (user.role !== 'student') {
+    return <Redirect href="/(tabs)/index" />;
+  }
+
   const handleEnrollment = (classId: string) => {
     if (!studentId) {
-      Alert.alert('Add your name', 'Enter your name before requesting enrollment.');
+      Alert.alert('Profile incomplete', 'Your profile is missing a display name.');
       return;
     }
 
@@ -195,7 +207,7 @@ export default function StudentScreen() {
 
   const handleAttend = (classId: string) => {
     if (!studentId) {
-      Alert.alert('Add your name', 'Enter your name before attending a class.');
+      Alert.alert('Profile incomplete', 'Your profile is missing a display name.');
       return;
     }
 
@@ -207,21 +219,33 @@ export default function StudentScreen() {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ThemedView style={styles.identityCard} lightColor="#ffffff" darkColor="#1f2933">
-        <ThemedText type="title" style={styles.title}>
-          Student portal
-        </ThemedText>
+        <View style={styles.identityHeader}>
+          <View>
+            <ThemedText type="title" style={styles.title}>
+              Student portal
+            </ThemedText>
+            <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+              Signed in as {studentName}
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={handleLogout}
+            style={({ pressed }) => [styles.logoutButton, pressed && styles.buttonPressed]}
+          >
+            <ThemedText style={styles.logoutButtonText}>Log out</ThemedText>
+          </Pressable>
+        </View>
         <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
-          Use a consistent display name so the instructor can confirm your enrollment and attendance history.
+          Request enrollment or join sessions when they are live to record your attendance.
         </ThemedText>
-        <TextInput
-          placeholder="Your name"
-          value={studentName}
-          onChangeText={setStudentName}
-          style={styles.input}
-        />
       </ThemedView>
 
       <ThemedText type="subtitle" style={styles.sectionHeading}>
@@ -267,16 +291,13 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  identityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   title: {
     marginBottom: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d0d0d0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
   },
   sectionHeading: {
     marginTop: 8,
@@ -351,6 +372,17 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  logoutButton: {
+    borderWidth: 1,
+    borderColor: '#d0d0d0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  logoutButtonText: {
+    color: '#0a7ea4',
+    fontWeight: '600',
   },
   historyRow: {
     flexDirection: 'row',
