@@ -11,6 +11,7 @@ export type FirebaseExtraConfig = {
 };
 
 type FirebaseConfig = Required<Pick<FirebaseExtraConfig, 'apiKey' | 'projectId' | 'appId'>> & FirebaseExtraConfig;
+type ExpoExtraConfig = { firebase?: FirebaseExtraConfig } | undefined;
 
 let firebaseAppPromise: Promise<any | null> | null = null;
 let firestorePromise: Promise<any | null> | null = null;
@@ -20,8 +21,61 @@ const hasRequiredFirebaseValues = (config: FirebaseExtraConfig | undefined | nul
   return Boolean(config.apiKey && config.projectId && config.appId);
 };
 
+const sanitizeEnvValue = (value: string | undefined) => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const getFirebaseConfigFromEnv = (): FirebaseExtraConfig => ({
+  apiKey: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_API_KEY),
+  authDomain: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN),
+  projectId: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID),
+  storageBucket: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  appId: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
+  measurementId: sanitizeEnvValue(process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID),
+});
+
+const getExpoExtra = (): ExpoExtraConfig => {
+  const expoConfigExtra = Constants.expoConfig?.extra as ExpoExtraConfig;
+  if (expoConfigExtra) {
+    return expoConfigExtra;
+  }
+
+  const legacyManifestExtra = (Constants.manifest as { extra?: ExpoExtraConfig } | null)?.extra;
+  if (legacyManifestExtra) {
+    return legacyManifestExtra;
+  }
+
+  const manifest2Extra = (Constants as typeof Constants & {
+    manifest2?: { extra?: ExpoExtraConfig | null } | null;
+  }).manifest2?.extra;
+
+  return manifest2Extra ?? undefined;
+};
+
+const mergeFirebaseConfig = (
+  baseConfig: FirebaseExtraConfig | undefined,
+  overrideConfig: FirebaseExtraConfig
+): FirebaseExtraConfig => {
+  const merged = { ...(baseConfig ?? {}) } as FirebaseExtraConfig;
+
+  (Object.entries(overrideConfig) as [keyof FirebaseExtraConfig, string | undefined][]).forEach(([key, value]) => {
+    if (typeof value === 'string' && value.length > 0) {
+      merged[key] = value;
+    }
+  });
+
+  return merged;
+};
+
 const getFirebaseConfig = (): FirebaseConfig | null => {
-  const firebaseConfig = Constants.expoConfig?.extra?.firebase as FirebaseExtraConfig | undefined;
+  const firebaseConfigFromExpo = getExpoExtra()?.firebase;
+  const firebaseConfig = mergeFirebaseConfig(firebaseConfigFromExpo, getFirebaseConfigFromEnv());
 
   if (!hasRequiredFirebaseValues(firebaseConfig)) {
     return null;
