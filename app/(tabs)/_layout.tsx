@@ -23,19 +23,19 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
       }}>
       <Tabs.Screen
-        name="index"
+        name="teacher"
         options={{
           title: 'Teacher',
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="person.crop.rectangle" color={color} />,
-          href: user.role === 'teacher' ? undefined : null,
+          href: user.role === 'teacher' ? '/(tabs)/teacher' : null,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="student"
         options={{
           title: 'Student',
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="person.2.fill" color={color} />,
-          href: user.role === 'student' ? undefined : null,
+          href: user.role === 'student' ? '/(tabs)/student' : null,
         }}
       />
     </Tabs>

@@ -192,11 +192,12 @@ export default function StudentScreen() {
   }
 
   if (user.role !== 'student') {
-    return <Redirect href="/(tabs)/index" />;
+    return <Redirect href="/(tabs)/teacher" />;
   }
 
   const handleEnrollment = (classId: string) => {
     if (!studentId) {
+      Alert.alert('Profile incomplete', 'Your profile is missing a display name.');
       Alert.alert('Profile incomplete', 'Your profile is missing a display name.');
       return;
     }

@@ -28,7 +28,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   if (user) {
-    return <Redirect href={user.role === 'teacher' ? '/(tabs)/index' : '/(tabs)/explore'} />;
+    return <Redirect href={user.role === 'teacher' ? '/(tabs)/teacher' : '/(tabs)/student'} />;
   }
 
   const handleSubmit = () => {
@@ -42,7 +42,7 @@ export default function LoginScreen() {
     login(trimmedName, selectedRole);
     setError(null);
 
-    const destination = selectedRole === 'teacher' ? '/(tabs)/index' : '/(tabs)/explore';
+    const destination = selectedRole === 'teacher' ? '/(tabs)/teacher' : '/(tabs)/student';
     router.replace(destination);
   };
 
