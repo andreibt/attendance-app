@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 
-type FirebaseExtraConfig = {
+export type FirebaseExtraConfig = {
   apiKey?: string;
   authDomain?: string;
   projectId?: string;
@@ -13,6 +13,7 @@ type FirebaseExtraConfig = {
 type FirebaseConfig = Required<Pick<FirebaseExtraConfig, 'apiKey' | 'projectId' | 'appId'>> & FirebaseExtraConfig;
 
 let firebaseAppPromise: Promise<any | null> | null = null;
+let firestorePromise: Promise<any | null> | null = null;
 
 const hasRequiredFirebaseValues = (config: FirebaseExtraConfig | undefined | null): config is FirebaseConfig => {
   if (!config) return false;
@@ -67,6 +68,71 @@ export const getFirebaseAuth = async () => {
   } catch (error) {
     console.warn('Firebase Auth module could not be loaded. Install the "firebase" package to enable it.', error);
     return null;
+  }
+};
+
+const loadFirestore = async () => {
+  const app = await getFirebaseApp();
+  if (!app) {
+    return null;
+  }
+
+  try {
+    // @ts-expect-error -- The Firebase Firestore SDK is optional and resolved at runtime when installed.
+    const { getFirestore } = await import('firebase/firestore');
+    return getFirestore(app);
+  } catch (error) {
+    console.warn('Firebase Firestore module could not be loaded. Install the "firebase" package to enable it.', error);
+    return null;
+  }
+};
+
+export const getFirebaseFirestore = async () => {
+  if (!firestorePromise) {
+    firestorePromise = loadFirestore();
+  }
+
+  return firestorePromise;
+};
+
+export const signInWithEmailAndPasswordFromFirebase = async (email: string, password: string) => {
+  const auth = await getFirebaseAuth();
+  if (!auth) {
+    throw new Error('Firebase Auth is not configured. Provide Firebase credentials to enable sign-in.');
+  }
+
+  try {
+    // @ts-expect-error -- The Firebase Auth SDK is optional and resolved at runtime when installed.
+    const { signInWithEmailAndPassword } = await import('firebase/auth');
+    return await signInWithEmailAndPassword(auth, email, password);
+  } catch (error) {
+    console.warn('Firebase sign-in failed. Verify your Firebase configuration.', error);
+    throw error;
+  }
+};
+
+type FirestoreUserRecord = {
+  displayName?: string;
+  role?: string;
+};
+
+export const fetchUserRecord = async (uid: string): Promise<FirestoreUserRecord | null> => {
+  const firestore = await getFirebaseFirestore();
+  if (!firestore) {
+    throw new Error('Firebase Firestore is not configured. Provide Firebase credentials to enable user profiles.');
+  }
+
+  try {
+    // @ts-expect-error -- The Firebase Firestore SDK is optional and resolved at runtime when installed.
+    const { doc, getDoc } = await import('firebase/firestore');
+    const snapshot = await getDoc(doc(firestore, 'users', uid));
+    if (!snapshot.exists()) {
+      return null;
+    }
+    return snapshot.data() as FirestoreUserRecord;
+  } catch (error) {
+    console.warn('Failed to load user profile from Firestore. Verify your Firebase configuration.', error);
+    throw error;
   }
 };
 

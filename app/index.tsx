@@ -1,49 +1,42 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Redirect, useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useAuth, UserRole } from '@/context/AuthContext';
-
-const roleOptions: { key: UserRole; title: string; description: string }[] = [
-  {
-    key: 'teacher',
-    title: 'Teacher',
-    description: 'Create classes, approve enrollments, and track attendance insights.',
-  },
-  {
-    key: 'student',
-    title: 'Student',
-    description: 'Join classes, request enrollment, and confirm attendance in real time.',
-  },
-];
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { user, login } = useAuth();
-  const [name, setName] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('teacher');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (user) {
     return <Redirect href={user.role === 'teacher' ? '/(tabs)/teacher' : '/(tabs)/student'} />;
   }
 
-  const handleSubmit = () => {
-    const trimmedName = name.trim();
+  const handleSubmit = async () => {
+    try {
+      setError(null);
+      setIsSubmitting(true);
 
-    if (!trimmedName) {
-      setError('Enter your name to continue.');
-      return;
+      const role = await login({ email, password });
+
+      const destination = role === 'teacher' ? '/(tabs)/teacher' : '/(tabs)/student';
+      router.replace(destination);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-
-    login(trimmedName, selectedRole);
-    setError(null);
-
-    const destination = selectedRole === 'teacher' ? '/(tabs)/teacher' : '/(tabs)/student';
-    router.replace(destination);
   };
 
   return (
@@ -57,53 +50,55 @@ export default function LoginScreen() {
         </ThemedText>
 
         <View style={styles.fieldGroup}>
-          <ThemedText type="defaultSemiBold">Display name</ThemedText>
+          <ThemedText type="defaultSemiBold">Email</ThemedText>
           <TextInput
-            placeholder="Enter your name"
-            value={name}
-            onChangeText={(text) => {
-              setName(text);
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={email}
+            onChangeText={(value) => {
+              setEmail(value);
               if (error) setError(null);
             }}
             style={styles.input}
-            autoCapitalize="words"
           />
-          {error ? (
-            <ThemedText style={styles.errorText} lightColor="#b91c1c" darkColor="#fca5a5">
-              {error}
-            </ThemedText>
-          ) : null}
         </View>
 
         <View style={styles.fieldGroup}>
-          <ThemedText type="defaultSemiBold">Role</ThemedText>
-          <View style={styles.roleGroup}>
-            {roleOptions.map((option) => {
-              const isActive = option.key === selectedRole;
-              return (
-                <Pressable
-                  key={option.key}
-                  onPress={() => setSelectedRole(option.key)}
-                  style={({ pressed }) => [
-                    styles.roleCard,
-                    isActive && styles.roleCardActive,
-                    pressed && styles.roleCardPressed,
-                  ]}
-                >
-                  <ThemedText type="subtitle" style={styles.roleTitle}>
-                    {option.title}
-                  </ThemedText>
-                  <ThemedText style={styles.roleDescription} lightColor="#6b7280" darkColor="#9ca3af">
-                    {option.description}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <ThemedText type="defaultSemiBold">Password</ThemedText>
+          <TextInput
+            placeholder="Enter your password"
+            secureTextEntry
+            value={password}
+            onChangeText={(value) => {
+              setPassword(value);
+              if (error) setError(null);
+            }}
+            style={styles.input}
+          />
         </View>
 
-        <Pressable onPress={handleSubmit} style={({ pressed }) => [styles.submitButton, pressed && styles.submitButtonPressed]}>
-          <ThemedText style={styles.submitButtonText}>Continue</ThemedText>
+        {error ? (
+          <ThemedText style={styles.errorText} lightColor="#b91c1c" darkColor="#fca5a5">
+            {error}
+          </ThemedText>
+        ) : null}
+
+        <Pressable
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+          style={({ pressed }) => [
+            styles.submitButton,
+            (pressed || isSubmitting) && styles.submitButtonPressed,
+            isSubmitting && styles.submitButtonDisabled,
+          ]}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <ThemedText style={styles.submitButtonText}>Sign in</ThemedText>
+          )}
         </Pressable>
       </ThemedView>
     </ThemedView>
@@ -146,29 +141,6 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
   },
-  roleGroup: {
-    gap: 12,
-  },
-  roleCard: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-  },
-  roleCardActive: {
-    borderColor: '#0a7ea4',
-    backgroundColor: '#e0f2fe',
-  },
-  roleCardPressed: {
-    opacity: 0.7,
-  },
-  roleTitle: {
-    marginBottom: 4,
-  },
-  roleDescription: {
-    fontSize: 14,
-  },
   submitButton: {
     backgroundColor: '#0a7ea4',
     paddingVertical: 14,
@@ -177,6 +149,9 @@ const styles = StyleSheet.create({
   },
   submitButtonPressed: {
     opacity: 0.7,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitButtonText: {
     color: '#fff',

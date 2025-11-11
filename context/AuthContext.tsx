@@ -1,17 +1,30 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import { signOutFromFirebase } from '@/lib/firebase';
+import { fetchUserRecord, signInWithEmailAndPasswordFromFirebase, signOutFromFirebase } from '@/lib/firebase';
 
 export type UserRole = 'teacher' | 'student';
 
 export type AuthenticatedUser = {
+  uid: string;
+  email: string;
   name: string;
   role: UserRole;
 };
 
+type LoginPayload = {
+  email: string;
+  password: string;
+};
+
+type FirebaseUserLike = {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+};
+
 type AuthContextValue = {
   user: AuthenticatedUser | null;
-  login: (name: string, role: UserRole) => void;
+  login: (payload: LoginPayload) => Promise<UserRole>;
   logout: () => Promise<void>;
 };
 
@@ -20,8 +33,49 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
 
-  const login = useCallback((name: string, role: UserRole) => {
-    setUser({ name, role });
+  const login = useCallback(async ({ email, password }: LoginPayload) => {
+    const sanitizedEmail = email.trim().toLowerCase();
+    if (!sanitizedEmail) {
+      throw new Error('Enter your email address to continue.');
+    }
+
+    if (!password) {
+      throw new Error('Enter your password to continue.');
+    }
+
+    const credential = await signInWithEmailAndPasswordFromFirebase(sanitizedEmail, password);
+    const firebaseUser = (credential as { user?: FirebaseUserLike | null } | null)?.user ?? null;
+
+    if (!firebaseUser) {
+      throw new Error('The Firebase user record could not be loaded.');
+    }
+
+    const profile = await fetchUserRecord(firebaseUser.uid);
+    if (!profile) {
+      throw new Error('No user profile was found for this account.');
+    }
+
+    const role = profile.role;
+    if (role !== 'teacher' && role !== 'student') {
+      throw new Error('This account does not have a valid role.');
+    }
+
+    const displayName =
+      profile.displayName ??
+      firebaseUser.displayName ??
+      firebaseUser.email ??
+      sanitizedEmail;
+
+    const authenticatedUser: AuthenticatedUser = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email ?? sanitizedEmail,
+      name: displayName,
+      role,
+    };
+
+    setUser(authenticatedUser);
+
+    return authenticatedUser.role;
   }, []);
 
   const logout = useCallback(async () => {
