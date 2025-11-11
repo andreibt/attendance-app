@@ -1,112 +1,371 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import {
+  AttendanceStatus,
+  ClassRecord,
+  formatDateTime,
+  getSessionStatus,
+  useAttendance,
+} from '@/context/AttendanceContext';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
 
-export default function TabTwoScreen() {
+const AttendanceStatusLabels: Record<AttendanceStatus, string> = {
+  pending: 'Pending',
+  present: 'Present',
+  absent: 'Absent',
+};
+
+const makeStudentId = (name: string) => name.trim().toLowerCase().replace(/\s+/g, '-');
+
+const StudentClassCard = ({
+  classItem,
+  studentId,
+  studentName,
+  onRequestEnrollment,
+  onAttend,
+}: {
+  classItem: ClassRecord;
+  studentId: string | null;
+  studentName: string;
+  onRequestEnrollment: (classId: string) => void;
+  onAttend: (classId: string) => void;
+}) => {
+  const normalizedStudentName = studentName.trim();
+  const enrollment = studentId
+    ? classItem.enrollments.find((item) => item.studentId === studentId)
+    : undefined;
+  const sessions = [...classItem.sessions].sort(
+    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  );
+  const activeSession = sessions.find((session) => getSessionStatus(session) === 'in-progress');
+  const upcomingSession = sessions.find((session) => getSessionStatus(session) !== 'completed');
+  const attendanceHistory = studentId
+    ? sessions
+        .map((session) => ({
+          id: session.id,
+          startTime: session.startTime,
+          status: session.attendance[studentId],
+        }))
+        .filter((entry) => entry.status)
+    : [];
+
+  const activeAttendanceStatus = studentId && activeSession ? activeSession.attendance[studentId] : undefined;
+
+  const canAttend = Boolean(
+    studentId &&
+      enrollment?.status === 'confirmed' &&
+      activeSession &&
+      typeof activeAttendanceStatus === 'string' &&
+      activeAttendanceStatus !== 'present'
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
+    <ThemedView style={styles.card} lightColor="#ffffff" darkColor="#111827">
+      <ThemedText type="subtitle" style={styles.cardTitle}>
+        {classItem.title}
+      </ThemedText>
+      <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+        Instructor: {classItem.teacher}
+      </ThemedText>
+      {classItem.description ? (
+        <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+          {classItem.description}
         </ThemedText>
+      ) : null}
+
+      <View style={styles.badgeRow}>
+        <View style={styles.badge}>
+          <ThemedText style={styles.badgeText}>Confirmed students</ThemedText>
+          <ThemedText style={styles.badgeNumber}>
+            {classItem.enrollments.filter((enrollment) => enrollment.status === 'confirmed').length}
+          </ThemedText>
+        </View>
+        <View style={styles.badge}>
+          <ThemedText style={styles.badgeText}>Pending approvals</ThemedText>
+          <ThemedText style={styles.badgeNumber}>
+            {classItem.enrollments.filter((enrollment) => enrollment.status === 'pending').length}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="defaultSemiBold">Enrollment</ThemedText>
+        <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+          {studentId
+            ? enrollment
+              ? enrollment.status === 'confirmed'
+                ? 'You are enrolled in this class.'
+                : 'Your enrollment request is awaiting teacher approval.'
+              : 'Not enrolled yet.'
+            : 'Enter your name to enroll and track attendance.'}
+        </ThemedText>
+        <Pressable
+          style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed, !studentId && styles.disabledButton]}
+          disabled={!studentId || Boolean(enrollment)}
+          onPress={() => onRequestEnrollment(classItem.id)}
+        >
+          <ThemedText style={styles.primaryButtonText}>
+            {enrollment ? (enrollment.status === 'confirmed' ? 'Enrolled' : 'Pending approval') : 'Enroll in class'}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="defaultSemiBold">Upcoming schedule</ThemedText>
+        {upcomingSession ? (
+          <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+            Next session: {formatDateTime(upcomingSession.startTime)} ({getSessionStatus(upcomingSession)})
+          </ThemedText>
+        ) : (
+          <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+            No sessions scheduled yet.
+          </ThemedText>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText type="defaultSemiBold">Attend class</ThemedText>
+        <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+          Join during the scheduled time to automatically mark your attendance.
+        </ThemedText>
+        <Pressable
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed && styles.buttonPressed,
+            (!canAttend || !studentId) && styles.disabledButton,
+          ]}
+          disabled={!canAttend || !studentId}
+          onPress={() => onAttend(classItem.id)}
+        >
+          <ThemedText style={styles.secondaryButtonText}>
+            {activeSession
+              ? canAttend
+                ? 'Attend now'
+                : 'Attendance recorded'
+              : 'Waiting for session start'}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      {normalizedStudentName && attendanceHistory.length > 0 ? (
+        <View style={styles.section}>
+          <ThemedText type="defaultSemiBold">Your attendance history</ThemedText>
+          {attendanceHistory.map((entry) => (
+            <View key={entry.id} style={styles.historyRow}>
+              <ThemedText style={styles.historyDate}>{formatDateTime(entry.startTime)}</ThemedText>
+              <ThemedText style={styles.historyStatus}>
+                {AttendanceStatusLabels[entry.status as AttendanceStatus]}
+              </ThemedText>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </ThemedView>
+  );
+};
+
+export default function StudentScreen() {
+  const { classes, requestEnrollment, markAttendanceForStudent } = useAttendance();
+  const [studentName, setStudentName] = useState('');
+
+  const studentId = useMemo(() => {
+    if (!studentName.trim()) return null;
+    return makeStudentId(studentName);
+  }, [studentName]);
+
+  const handleEnrollment = (classId: string) => {
+    if (!studentId) {
+      Alert.alert('Add your name', 'Enter your name before requesting enrollment.');
+      return;
+    }
+
+    requestEnrollment(classId, { studentId, studentName: studentName.trim() });
+    Alert.alert('Request sent', 'Your enrollment request was sent to the instructor.');
+  };
+
+  const handleAttend = (classId: string) => {
+    if (!studentId) {
+      Alert.alert('Add your name', 'Enter your name before attending a class.');
+      return;
+    }
+
+    const result = markAttendanceForStudent(classId, studentId);
+    if (result.success) {
+      Alert.alert('Attendance confirmed', 'You have been marked present for this session.');
+    } else if (result.reason) {
+      Alert.alert('Unable to record attendance', result.reason);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <ThemedView style={styles.identityCard} lightColor="#ffffff" darkColor="#1f2933">
+        <ThemedText type="title" style={styles.title}>
+          Student portal
+        </ThemedText>
+        <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+          Use a consistent display name so the instructor can confirm your enrollment and attendance history.
+        </ThemedText>
+        <TextInput
+          placeholder="Your name"
+          value={studentName}
+          onChangeText={setStudentName}
+          style={styles.input}
+        />
       </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
+
+      <ThemedText type="subtitle" style={styles.sectionHeading}>
+        Available classes
+      </ThemedText>
+      {classes.length === 0 ? (
+        <ThemedText style={styles.helperText} lightColor="#6b7280" darkColor="#9ca3af">
+          Classes will appear here once created by instructors.
         </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
+      ) : (
+        <FlatList
+          data={classes}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <StudentClassCard
+              classItem={item}
+              studentId={studentId}
+              studentName={studentName}
+              onRequestEnrollment={handleEnrollment}
+              onAttend={handleAttend}
+            />
+          )}
+          scrollEnabled={false}
+          contentContainerStyle={{ gap: 16 }}
         />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    padding: 16,
+    gap: 16,
   },
-  titleContainer: {
+  identityCard: {
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  title: {
+    marginBottom: 4,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#d0d0d0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+  },
+  sectionHeading: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  card: {
+    borderRadius: 12,
+    padding: 16,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cardTitle: {
+    marginBottom: 4,
+  },
+  helperText: {
+    marginBottom: 4,
+  },
+  badgeRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
+  },
+  badge: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d0d0d0',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 4,
+  },
+  badgeText: {
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  badgeNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  section: {
+    gap: 10,
+  },
+  primaryButton: {
+    backgroundColor: '#0a7ea4',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: '#0a7ea4',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#0a7ea4',
+    fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.6,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e5e5',
+    paddingVertical: 8,
+  },
+  historyDate: {
+    fontSize: 14,
+  },
+  historyStatus: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
+
