@@ -25,6 +25,23 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Configure Firebase (optional but recommended)
+
+This project includes lightweight helpers for connecting to a Firebase project. To enable them:
+
+1. Install the Firebase JavaScript SDK in your local environment:
+
+   ```bash
+   npm install firebase
+   ```
+
+2. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com/) and add a **Web** app.
+3. Copy the configuration snippet that Firebase generates (the object with keys such as `apiKey`, `projectId`, and `appId`).
+4. Duplicate `.env.example` as `.env` and paste the values into the corresponding `EXPO_PUBLIC_FIREBASE_*` entries.
+5. Restart your Expo development server so the new environment variables are picked up.
+
+Once configured, the helper in `lib/firebase.ts` will initialize Firebase automatically and the logout flow will also sign the user out of Firebase Auth when available.
+
 ## Get a fresh project
 
 When you're ready, run:

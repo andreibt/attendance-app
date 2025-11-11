@@ -266,8 +266,8 @@ export default function TeacherScreen() {
     setAttendanceStatus(classId, sessionId, studentId, status);
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace('/');
   };
 

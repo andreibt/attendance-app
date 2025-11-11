@@ -220,8 +220,8 @@ export default function StudentScreen() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace('/');
   };
 
