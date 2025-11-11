@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
+import { signOutFromFirebase } from '@/lib/firebase';
+
 export type UserRole = 'teacher' | 'student';
 
 export type AuthenticatedUser = {
@@ -10,7 +12,7 @@ export type AuthenticatedUser = {
 type AuthContextValue = {
   user: AuthenticatedUser | null;
   login: (name: string, role: UserRole) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -22,8 +24,14 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     setUser({ name, role });
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
+  const logout = useCallback(async () => {
+    try {
+      await signOutFromFirebase();
+    } catch (error) {
+      console.warn('Failed to sign out from Firebase', error);
+    } finally {
+      setUser(null);
+    }
   }, []);
 
   const value = useMemo(
