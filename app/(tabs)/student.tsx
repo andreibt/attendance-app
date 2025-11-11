@@ -198,6 +198,7 @@ export default function StudentScreen() {
   const handleEnrollment = (classId: string) => {
     if (!studentId) {
       Alert.alert('Profile incomplete', 'Your profile is missing a display name.');
+      Alert.alert('Profile incomplete', 'Your profile is missing a display name.');
       return;
     }
 
